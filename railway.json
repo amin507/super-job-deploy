@@ -1,0 +1,10 @@
+{
+  "services": {
+    "odoo": {
+      "path": "odoo"
+    },
+    "backend": {
+      "path": "backend"
+    }
+  }
+}
