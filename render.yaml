@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: super-job-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    healthCheckPath: /health
+    autoDeploy: true
+
+  - type: postgres
+    name: super-job-db
+    plan: free
+    ipAllowList: []  # Allow all for free tier
+    databaseName: super_job_db

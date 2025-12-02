@@ -1,0 +1,58 @@
+version: '3.1'
+services:
+  odoo:
+    image: odoo:18.0
+    container_name: odoo_superjob
+    depends_on:
+      - db
+    ports:
+      - "8069:8069"
+    environment:
+      - HOST=db
+      - USER=admin
+      - PASSWORD=admin
+      - POSTGRES_DB=odoo_db
+    volumes:
+      - odoo_data:/var/lib/odoo
+      - ./addons:/mnt/extra-addons  # Optional: untuk custom addons
+    restart: unless-stopped
+
+  db:
+    image: postgres:13
+    container_name: postgres_superjob
+    environment:
+      - POSTGRES_DB=odoo_db
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_USER=admin
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    ports:
+      - "5432:5432"  # Expose port untuk akses dari host
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  fastapi-app:
+    build: .
+    container_name: fastapi_superjob
+    ports:
+      - "8000:8000"
+    environment:
+      - ODOO_URL=http://odoo:8069
+      - ODOO_ADMIN_USER=admin
+      - ODOO_ADMIN_PASSWORD=admin
+      - ODOO_DB_HOST=db
+      - ODOO_DB_PORT=5432
+      - ODOO_DB_NAME=odoo_db
+      - ODOO_DB_USER=admin
+      - ODOO_DB_PASSWORD=admin
+      - JWT_SECRET_KEY=your-secret-key-here-change-in-production
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRE_MINUTES=30
+    depends_on:
+      - db
+      - odoo
+    restart: unless-stopped
+
+volumes:
+  odoo_data:
+  postgres_data:
