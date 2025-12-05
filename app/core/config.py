@@ -1,32 +1,3 @@
-# import os
-# from dotenv import load_dotenv
-
-# load_dotenv()
-
-# class Settings:
-#     PROJECT_NAME: str = "Super Job Backend"
-#     VERSION: str = "1.0.0"
-#     API_V1_STR: str = "/api/v1"
-    
-#     # Database Odoo
-#     ODOO_DB_HOST = os.getenv("ODOO_DB_HOST")
-#     ODOO_DB_PORT = os.getenv("ODOO_DB_PORT")
-#     ODOO_DB_NAME = os.getenv("ODOO_DB_NAME")
-#     ODOO_DB_USER = os.getenv("ODOO_DB_USER")
-#     ODOO_DB_PASSWORD = os.getenv("ODOO_DB_PASSWORD")
-    
-#     # Odoo API
-#     ODOO_URL = os.getenv("ODOO_URL")
-#     ODOO_ADMIN_USER = os.getenv("ODOO_ADMIN_USER")
-#     ODOO_ADMIN_PASSWORD = os.getenv("ODOO_ADMIN_PASSWORD")
-    
-#     # JWT
-#     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-#     JWT_ALGORITHM = os.getenv("JWT_ALGORITHM")
-#     JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", 30))
-
-# settings = Settings()
-
 
 import os
 from dotenv import load_dotenv

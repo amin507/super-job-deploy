@@ -9,11 +9,11 @@ from app.schemas.candidate import (
 )
 from app.services.candidate_service import CandidateService
 from app.services.scoring_engine import ScoringEngine
-from app.core.security import get_current_user  # ← IMPORT INI
-from app.schemas.models import OdooUser  # ← IMPORT INI
+from app.core.security import get_current_user
+from app.schemas.models import OdooUser
 
 router = APIRouter()
-security = HTTPBearer()  # ← TAMBAH INI
+security = HTTPBearer()
 
 # Tambahkan dependency di semua endpoints
 @router.get("/jobs/{job_id}/candidates/ranking", response_model=List[CandidateRankingResponse])
