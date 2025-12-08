@@ -66,7 +66,21 @@ def init_database():
 
         
         
-        # Create users table
+        # # Create users table
+        # cursor.execute("""
+        # CREATE TABLE IF NOT EXISTS users (
+        #     id SERIAL PRIMARY KEY,
+        #     email VARCHAR(255) UNIQUE NOT NULL,
+        #     username VARCHAR(100) UNIQUE NOT NULL,
+        #     full_name VARCHAR(255),
+        #     password_hash VARCHAR(255) NOT NULL,
+        #     is_active BOOLEAN DEFAULT true,
+        #     is_superuser BOOLEAN DEFAULT false,
+        #     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        #     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        # );
+        # """)
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -74,6 +88,7 @@ def init_database():
             username VARCHAR(100) UNIQUE NOT NULL,
             full_name VARCHAR(255),
             password_hash VARCHAR(255) NOT NULL,
+            role VARCHAR(50) DEFAULT 'candidate' CHECK (role IN ('admin', 'employer', 'candidate')),
             is_active BOOLEAN DEFAULT true,
             is_superuser BOOLEAN DEFAULT false,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -101,7 +116,26 @@ def init_database():
         CREATE INDEX IF NOT EXISTS idx_candidate_score_fit ON candidate_score(fit_score);
         """)
         
-        # Check if admin user exists
+        # # Check if admin user exists
+        # cursor.execute("SELECT id FROM users WHERE email = 'admin@superjob.com'")
+        # admin_exists = cursor.fetchone()
+        
+        # if not admin_exists:
+        #     # Generate bcrypt hash for 'admin123'
+        #     password = "admin123"
+        #     password_bytes = password.encode('utf-8')
+        #     salt = bcrypt.gensalt()
+        #     hashed_password = bcrypt.hashpw(password_bytes, salt).decode('utf-8')
+            
+        #     cursor.execute("""
+        #     INSERT INTO users (email, username, full_name, password_hash, is_superuser)
+        #     VALUES (%s, %s, %s, %s, true)
+        #     """, ('admin@superjob.com', 'admin', 'System Administrator', hashed_password))
+            
+        #     logger.info("Default admin user created with password: admin123")
+        # else:
+        #     logger.info("Admin user already exists")
+
         cursor.execute("SELECT id FROM users WHERE email = 'admin@superjob.com'")
         admin_exists = cursor.fetchone()
         
@@ -113,13 +147,22 @@ def init_database():
             hashed_password = bcrypt.hashpw(password_bytes, salt).decode('utf-8')
             
             cursor.execute("""
-            INSERT INTO users (email, username, full_name, password_hash, is_superuser)
-            VALUES (%s, %s, %s, %s, true)
+            INSERT INTO users (email, username, full_name, password_hash, role, is_superuser)
+            VALUES (%s, %s, %s, %s, 'admin', true)
             """, ('admin@superjob.com', 'admin', 'System Administrator', hashed_password))
             
             logger.info("Default admin user created with password: admin123")
         else:
-            logger.info("Admin user already exists")
+            # Update existing admin to have 'admin' role
+            cursor.execute("""
+            UPDATE users 
+            SET role = 'admin' 
+            WHERE email = 'admin@superjob.com' AND (role IS NULL OR role != 'admin')
+            """)
+            if cursor.rowcount > 0:
+                logger.info("Updated existing admin user role to 'admin'")
+            else:
+                logger.info("Admin user already exists")
         
         # Test insert some sample candidate scores for testing
         cursor.execute("""
