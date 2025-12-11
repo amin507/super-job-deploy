@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Query, Path, Body
+from fastapi import APIRouter, HTTPException, Depends, Query, Path, Body, Request
 from typing import List, Optional
 import logging
 
@@ -105,6 +105,7 @@ async def get_application(
 
 @router.post("/", response_model=dict)
 async def create_application(
+    request: Request,
     application_data: ApplicationCreate,
     current_user: UserResponse = Depends(get_current_user)
 ):
@@ -115,7 +116,10 @@ async def create_application(
         # Here we assume candidate is creating their own application
         application_id = application_service.create_application(
             application_data, 
-            candidate_id=current_user.id
+            candidate_id=current_user.id,
+            actor_role=getattr(current_user, "role", None),
+            actor_ip=request.client.host,
+            actor_user_agent=request.headers.get("user-agent"),
         )
         
         if not application_id:
@@ -134,6 +138,7 @@ async def create_application(
 
 @router.put("/{application_id}/status", response_model=dict)
 async def update_application_status(
+    request: Request,
     application_id: int = Path(..., description="Application ID"),
     new_status: str = Body(..., embed=True),
     new_stage: Optional[str] = Body(None, embed=True),
@@ -160,7 +165,9 @@ async def update_application_status(
                 )
         
         success = application_service.update_application_status(
-            application_id, new_status, new_stage, current_user.id, reason
+            application_id, new_status, new_stage, current_user.id, reason, actor_role=getattr(current_user, "role", None),
+            actor_ip=request.client.host,
+            actor_user_agent=request.headers.get("user-agent"),
         )
         
         if not success:
