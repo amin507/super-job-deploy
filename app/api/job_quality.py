@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Path, status
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,9 +15,16 @@ from app.services.job_suggestions import get_job_suggestions
 router = APIRouter(prefix="/jobs", tags=["job-quality"])
 
 
-REQUIRED_FIELDS = ("title", "description", "salary", "experience_level", "location", "employment_type")
+REQUIRED_FIELDS = (
+    "title",
+    "description",
+    "salary",
+    "experience_level",
+    "location",
+    "employment_type",
+)
 _CACHE_TTL_SECONDS = 300
-_quality_cache: Dict[uuid.UUID, tuple[datetime, Dict]] = {}
+_quality_cache: Dict[str, tuple[datetime, Dict]] = {}  # key is job_id string
 
 
 def _has_minimum_data(job: JobPosting) -> bool:
@@ -27,7 +34,9 @@ def _has_minimum_data(job: JobPosting) -> bool:
     has_level = bool(job.experience_level)
     has_location = bool(job.location)
     has_employment = bool(job.employment_type)
-    return all([has_title, has_desc, has_salary, has_level, has_location, has_employment])
+    return all(
+        [has_title, has_desc, has_salary, has_level, has_location, has_employment]
+    )
 
 
 def _is_optimal(job: JobPosting, score: float, suggestions: list[str]) -> bool:
@@ -38,7 +47,7 @@ def _is_optimal(job: JobPosting, score: float, suggestions: list[str]) -> bool:
     return score >= 90 and len(suggestions) == 0
 
 
-def _get_cached(job_id: uuid.UUID) -> Optional[Dict]:
+def _get_cached(job_id: str) -> Optional[Dict]:
     now = datetime.now(timezone.utc)
     cached = _quality_cache.get(job_id)
     if not cached:
@@ -50,7 +59,7 @@ def _get_cached(job_id: uuid.UUID) -> Optional[Dict]:
     return payload
 
 
-def _set_cache(job_id: uuid.UUID, payload: Dict) -> None:
+def _set_cache(job_id: str, payload: Dict) -> None:
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=_CACHE_TTL_SECONDS)
     _quality_cache[job_id] = (expires_at, payload)
 
@@ -59,22 +68,50 @@ def clear_job_score_cache() -> None:
     _quality_cache.clear()
 
 
-def invalidate_job_cache(job_id: uuid.UUID) -> None:
+def invalidate_job_cache(job_id: str) -> None:
     _quality_cache.pop(job_id, None)
 
 
-@router.get("/{job_id}/quality-score", response_model=JobQualityResponse)
+@router.get(
+    "/{job_id}/quality-score",
+    response_model=JobQualityResponse,
+    summary="Get Job Quality Score",
+    description="""
+    Menghitung dan mengembalikan skor kualitas lowongan kerja.
+    
+    **Format job_id:** UUID (contoh: `11111111-1111-1111-1111-111111111111`)
+    
+    **Response:**
+    - `score`: Skor kualitas (0-100)
+    - `grade`: Grade (A, B, C, D, F)
+    - `optimal`: True jika skor >= 90 dan tidak ada saran perbaikan
+    - `suggestions`: Daftar saran perbaikan
+    
+    **Test Data yang tersedia:**
+    - `11111111-1111-1111-1111-111111111111` (Senior Software Engineer)
+    - `11111111-1111-1111-1111-111111111112` (Junior Frontend Developer)
+    - `11111111-1111-1111-1111-111111111113` (Product Manager)
+    """,
+)
 async def get_job_quality_score(
-    job_id: uuid.UUID,
+    job_id: uuid.UUID = Path(
+        ...,
+        description="Job ID dalam format UUID. Contoh: 11111111-1111-1111-1111-111111111111",
+        example="11111111-1111-1111-1111-111111111111",
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> JobQualityResponse:
-    cached = _get_cached(job_id)
+    # Convert UUID to string since job_postings.id is String(36)
+    job_id_str = str(job_id)
+    cached = _get_cached(job_id_str)
     if cached:
         return cached
 
-    job = await db.get(JobPosting, job_id)
+    job = await db.get(JobPosting, job_id_str)
     if job is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Job not found"
+        )
 
     suggestions = get_job_suggestions(job)
 
@@ -104,7 +141,9 @@ async def get_job_quality_score(
     try:
         result = compute_quality_score(job)
     except Exception as exc:
-        logger.exception("Failed to compute job quality score", job_id=str(job_id), exc=exc)
+        logger.exception(
+            "Failed to compute job quality score", job_id=str(job_id), exc=exc
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Gagal menghitung skor",
@@ -122,15 +161,40 @@ async def get_job_quality_score(
     return response
 
 
-@router.patch("/{job_id}", response_model=JobQualityResponse)
+@router.patch(
+    "/{job_id}",
+    response_model=JobQualityResponse,
+    summary="Update Job Fields",
+    description="""
+    Update field-field lowongan kerja dan kembalikan skor kualitas terbaru.
+    
+    **Format job_id:** UUID (contoh: `11111111-1111-1111-1111-111111111111`)
+    
+    **Fields yang bisa diupdate:**
+    - `title`, `description`, `location`
+    - `salary_min`, `salary_max`, `salary_currency`
+    - `skills`, `employment_type`, `experience_level`
+    - `education`, `benefits`, `contact_url`, `status`
+    
+    **Test Data yang tersedia:**
+    - `11111111-1111-1111-1111-111111111111` (Senior Software Engineer)
+    """,
+)
 async def update_job_fields(
-    job_id: uuid.UUID,
-    payload: JobUpdate,
+    job_id: uuid.UUID = Path(
+        ...,
+        description="Job ID dalam format UUID",
+        example="11111111-1111-1111-1111-111111111111",
+    ),
+    payload: JobUpdate = ...,
     db: AsyncSession = Depends(get_db),
 ) -> JobQualityResponse:
-    job = await db.get(JobPosting, job_id)
+    # Convert UUID to string since job_postings.id is String(36)
+    job = await db.get(JobPosting, str(job_id))
     if job is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Job not found"
+        )
 
     update_data = payload.model_dump(exclude_unset=True)
     for field, value in update_data.items():
