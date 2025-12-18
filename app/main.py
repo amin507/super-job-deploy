@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 
+
 # from app.services.database import init_database
 from app.core.config import settings
 from app.api.routers import auth, health, candidate
@@ -32,7 +33,7 @@ from app.api import reminders
 from app.api import job_quality
 from app.api import dashboard
 from app.api import employer_resources
-from app.api import job_performance
+
 from app.models import reminder as reminder_model
 from app.models import job_posting as job_posting_model
 from app.models import candidate_application as candidate_application_model
@@ -96,7 +97,7 @@ app.include_router(reminders.router, prefix=settings.API_V1_STR)
 app.include_router(job_quality.router, prefix=settings.API_V1_STR)
 app.include_router(dashboard.router, prefix=settings.API_V1_STR)
 app.include_router(employer_resources.router, prefix=settings.API_V1_STR)
-app.include_router(job_performance.router, prefix=settings.API_V1_STR)
+
 app.include_router(interview_feedback_router, prefix=settings.API_V1_STR)
 app.include_router(team_member_router, prefix=settings.API_V1_STR)
 
