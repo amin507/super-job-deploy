@@ -8,7 +8,6 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Integer,
-    String,
 )
 from sqlalchemy.sql import func, text
 from sqlalchemy.orm import relationship
@@ -22,7 +21,7 @@ class TeamMemberRole(str, enum.Enum):
     HR_MANAGER = "hr_manager"
     RECRUITER = "recruiter"
     HIRING_MANAGER = "hiring_manager"
-    VIEWER = "viewer"
+    TRAINER = "trainer"
 
 
 class TeamMember(Base):
@@ -33,12 +32,11 @@ class TeamMember(Base):
     id = Column(BigInteger, primary_key=True, autoincrement=True, index=True)
     employer_id = Column(Integer, nullable=False, index=True)  # ID perusahaan/employer
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    name = Column(String(255), nullable=False)
-    email = Column(String(255), nullable=False)
+    # name dan email diambil dari relasi User, tidak disimpan di tabel ini
     role = Column(
         Enum(TeamMemberRole, name="team_member_role"),
         nullable=False,
-        server_default=TeamMemberRole.VIEWER.value,
+        server_default=TeamMemberRole.RECRUITER.value,
     )
     is_active = Column(Boolean, nullable=False, server_default=text("true"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
