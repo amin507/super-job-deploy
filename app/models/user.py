@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, String, DateTime, Boolean, Enum, func
+from sqlalchemy import BigInteger, Integer, String, DateTime, Boolean, Enum, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from datetime import datetime
@@ -27,6 +27,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True
+    )  # Phone number
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, name="user_role", create_constraint=False),
@@ -38,6 +41,12 @@ class User(Base):
     )
     is_superuser: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
+    )
+
+    # Company relation for employers (references companies.id which is BigInteger)
+    # Note: No FK constraint because companies.id doesn't have PRIMARY KEY in database
+    company_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True, index=True
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -53,6 +62,7 @@ class User(Base):
     )
 
     # Relationships
+    # Note: No company relationship as there's no FK constraint to companies table
     reviews: Mapped[List["CompanyReview"]] = relationship(
         "CompanyReview", back_populates="user"
     )

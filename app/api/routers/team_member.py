@@ -124,12 +124,18 @@ async def list_team_members(
     description="""
     Menambahkan anggota tim baru.
     
+    **Design Reference:** "Add New Member" dialog
+    
     **Ada 2 mode:**
     1. **Tambah user yang sudah ada**: Berikan `user_id` saja
-    2. **Buat user baru + tambahkan ke tim**: Berikan `username`, `email`, `password` (user_id kosong)
+    2. **Buat user baru + tambahkan ke tim**: Berikan `name`, `email`, `password` (user_id kosong)
     
     **Authorization:**
-    User harus menjadi team member dari employer yang diminta.
+    User harus login sebagai Corporate (employer/admin) dan menjadi team member dari employer.
+    
+    **Company ID:**
+    User baru akan otomatis mendapatkan `company_id` yang sama dengan user yang menambahkannya.
+    Jika user existing ditambahkan dan belum punya `company_id`, maka akan diupdate.
     
     **Roles yang tersedia:**
     - `admin` - Full access
@@ -139,12 +145,11 @@ async def list_team_members(
     - `trainer` - Trainer
     
     **Request Body:**
-    - `user_id`: ID user yang sudah ada (optional)
-    - `username`: Username (wajib jika buat user baru)
-    - `full_name`: Nama lengkap (optional)
+    - `name`: Nama lengkap (wajib jika buat user baru)
+    - `phone`: Nomor telepon (optional)
     - `email`: Email (wajib jika buat user baru)
-    - `password`: Password (wajib jika buat user baru)
     - `role`: Role untuk team member (default: trainer)
+    - `password`: Password (wajib jika buat user baru)
     """,
 )
 async def add_team_member(
@@ -159,6 +164,10 @@ async def add_team_member(
         # Authorization check
         await require_employer_access(db, current_user.id, employer_id)
 
+        # Get current user's company_id to inherit to new members
+        current_user_db = await db.get(User, current_user.id)
+        company_id = current_user_db.company_id if current_user_db else None
+
         user = None
 
         # Case 1: User ID provided - use existing user
@@ -169,14 +178,17 @@ async def add_team_member(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"User with id {member_data.user_id} not found",
                 )
+            # Update existing user's company_id if not set
+            if user.company_id is None and company_id is not None:
+                user.company_id = company_id
 
         # Case 2: No user_id - create new user
         else:
             # Validate required fields for new user
-            if not member_data.username:
+            if not member_data.name:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Username is required when creating a new user",
+                    detail="Name is required when creating a new user",
                 )
             if not member_data.email:
                 raise HTTPException(
@@ -199,23 +211,26 @@ async def add_team_member(
                     detail=f"User with email {member_data.email} already exists",
                 )
 
-            # Check if username already exists
-            existing_username = await db.scalar(
-                select(User).where(User.username == member_data.username)
-            )
-            if existing_username:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"User with username {member_data.username} already exists",
-                )
+            # Generate username from email (sebelum @)
+            base_username = member_data.email.split("@")[0]
+            username = base_username
 
-            # Create new user
+            # Check if username already exists, add suffix if needed
+            counter = 1
+            while await db.scalar(select(User).where(User.username == username)):
+                username = f"{base_username}{counter}"
+                counter += 1
+
+            # Create new user with employer role and same company_id
             user = User(
-                username=member_data.username,
-                full_name=member_data.full_name,
+                username=username,
+                full_name=member_data.name,
+                phone=member_data.phone,
                 email=member_data.email,
                 password_hash=hash_password(member_data.password),
+                role="employer",  # Team members are always employer role
                 is_active=True,
+                company_id=company_id,  # Inherit company_id from current_user
             )
             db.add(user)
             await db.flush()  # Get ID but don't commit yet
@@ -281,16 +296,18 @@ async def add_team_member(
     description="""
     Update data anggota tim dan juga data user-nya.
     
+    **Design Reference:** "Update Member" dialog
+    
     **Authorization:**
-    User harus menjadi team member dari employer yang diminta.
+    User harus login sebagai Corporate (employer/admin) dan menjadi team member dari employer.
     
     **Fields yang bisa diupdate:**
-    - `role`: Role baru untuk team member
-    - `is_active`: Status aktif team member
-    - `username`: Username user (di tabel users)
-    - `full_name`: Nama lengkap user (di tabel users)
-    - `email`: Email user (di tabel users)
-    - `password`: Password baru (akan di-hash)
+    - `name`: Nama lengkap
+    - `phone`: Nomor telepon
+    - `email`: Email
+    - `role`: Role (admin, hr_manager, recruiter, hiring_manager, trainer)
+    - `is_active`: Member active? (toggle)
+    - `password`: Password baru (optional)
     """,
 )
 async def update_team_member(
@@ -335,28 +352,18 @@ async def update_team_member(
         # Update user fields if provided
         user = member.user
         if user:
-            if member_data.username is not None:
-                # Check if new username conflicts
-                if member_data.username != user.username:
-                    existing = await db.scalar(
-                        select(User).where(
-                            User.username == member_data.username, User.id != user.id
-                        )
-                    )
-                    if existing:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"Username {member_data.username} already taken",
-                        )
-                    user.username = member_data.username
-                    updated = True
-
-            if member_data.full_name is not None:
-                user.full_name = member_data.full_name
+            # Update name (full_name in database)
+            if member_data.name is not None:
+                user.full_name = member_data.name
                 updated = True
 
+            # Update phone
+            if member_data.phone is not None:
+                user.phone = member_data.phone
+                updated = True
+
+            # Update email with conflict check
             if member_data.email is not None:
-                # Check if new email conflicts
                 if member_data.email != user.email:
                     existing = await db.scalar(
                         select(User).where(
@@ -371,6 +378,7 @@ async def update_team_member(
                     user.email = member_data.email
                     updated = True
 
+            # Update password
             if member_data.password is not None:
                 user.password_hash = hash_password(member_data.password)
                 updated = True

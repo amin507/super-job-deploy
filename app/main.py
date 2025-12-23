@@ -75,6 +75,7 @@ app.add_middleware(
 
 register_timing_middleware(app)
 
+# Authentication routers
 app.include_router(auth_router)
 app.include_router(health_router)
 app.include_router(candidate_router, prefix=settings.API_V1_STR)
